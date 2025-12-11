@@ -700,78 +700,77 @@ with docs_tab:
     st.subheader("Generate Technical Documentation")
     st.markdown("Generate a consolidated Markdown document explaining the project structure and purpose of your files.")
 
-    with st.form("docs_form", clear_on_submit=False):
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.selectbox(
-                "LLM Model",
-                get_sorted_models(),
-                index=0,
-                key="docs_llm_model",
-                help="Choose the language model to use for documentation generation. Claude and GPT models are recommended."
-            )
-        with c2:
-            docs_input_folder = st.text_input(
-                "Input Folder",
-                value="/Volumes/users/user_name/volume_name/project_folder/",
-                key="docs_input_folder",
-                help="The path (/Workspace or /Volumes) to the folder containing the files to document."
-            )
-        with c3:
-            docs_output_folder = st.text_input(
-                "Output Folder (Workspace Path)",
-                value="/Workspace/Users/user_name/documentation/",
-                key="docs_output_folder",
-                help="The Workspace path where the generated markdown file will be saved."
-            )
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.selectbox(
+            "LLM Model",
+            get_sorted_models(),
+            index=0,
+            key="docs_llm_model",
+            help="Choose the language model to use for documentation generation. Claude and GPT models are recommended."
+        )
+    with c2:
+        docs_input_folder = st.text_input(
+            "Input Folder",
+            value="/Volumes/users/user_name/volume_name/project_folder/",
+            key="docs_input_folder",
+            help="The path (/Workspace or /Volumes) to the folder containing the files to document."
+        )
+    with c3:
+        docs_output_folder = st.text_input(
+            "Output Folder (Workspace Path)",
+            value="/Workspace/Users/user_name/documentation/",
+            key="docs_output_folder",
+            help="The Workspace path where the generated markdown file will be saved."
+        )
 
-        # Warehouse selection for docs tab
-        wh_col_docs, refresh_col_docs = st.columns([4, 1])
-        with wh_col_docs:
-            try:
-                warehouses_docs = get_warehouses()
-            except Exception as e:
-                st.error(f"Failed to fetch SQL warehouses: {e}")
-                warehouses_docs = {}
-            
-            if not warehouses_docs:
-                st.warning("⚠️ No warehouses accessible. Grant the service principal access, then click refresh.")
-            
-            wh_name_docs = st.selectbox(
-                "SQL Warehouse",
-                options=list(warehouses_docs.keys()) or [""],
-                key="warehouse_docs",
-                help="Warehouse that runs the documentation generation query."
-            )
-            if wh_name_docs:
-                ss.warehouse_id_docs = warehouses_docs.get(wh_name_docs)
+    # Warehouse selection for docs tab (outside form to allow refresh button)
+    wh_col_docs, refresh_col_docs = st.columns([4, 1])
+    with wh_col_docs:
+        try:
+            warehouses_docs = get_warehouses()
+        except Exception as e:
+            st.error(f"Failed to fetch SQL warehouses: {e}")
+            warehouses_docs = {}
         
-        with refresh_col_docs:
-            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            if st.button("🔄", key="refresh_warehouses_docs", help="Refresh warehouse list"):
-                get_warehouses.clear()
-                st.rerun()
+        if not warehouses_docs:
+            st.warning("⚠️ No warehouses accessible. Grant the service principal access, then click refresh.")
+        
+        wh_name_docs = st.selectbox(
+            "SQL Warehouse",
+            options=list(warehouses_docs.keys()) or [""],
+            key="warehouse_docs",
+            help="Warehouse that runs the documentation generation query."
+        )
+        if wh_name_docs:
+            ss.warehouse_id_docs = warehouses_docs.get(wh_name_docs)
+    
+    with refresh_col_docs:
+        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+        if st.button("🔄", key="refresh_warehouses_docs", help="Refresh warehouse list"):
+            get_warehouses.clear()
+            st.rerun()
 
-        st.warning(f"⚠️ **IMPORTANT:** The service principal must have:\n"
-                   f"- `CAN USE` permission on the selected SQL Warehouse\n"
-                   f"- `READ` permission on the input folder\n"
-                   f"- `WRITE` permission on the output folder\n\n"
-                   f"**Service Principal ID:** `{sp_id}`")
-        
-        docs_submitted = st.form_submit_button("Generate Markdown Docs", type="primary", use_container_width=True)
+    st.warning(f"⚠️ **IMPORTANT:** The service principal must have:\n"
+               f"- `CAN USE` permission on the selected SQL Warehouse\n"
+               f"- `READ` permission on the input folder\n"
+               f"- `WRITE` permission on the output folder\n\n"
+               f"**Service Principal ID:** `{sp_id}`")
+    
+    docs_submitted = st.button("Generate Markdown Docs", type="primary", use_container_width=True, key="btn_generate_docs")
 
     if docs_submitted:
-        docs_input_folder = docs_input_folder.strip()
-        docs_output_folder = docs_output_folder.strip()
+        input_folder_docs = ss.get("docs_input_folder", "").strip()
+        output_folder_docs = ss.get("docs_output_folder", "").strip()
         
-        if not all([ss.docs_llm_model, docs_input_folder, docs_output_folder, ss.get("warehouse_id_docs")]):
+        if not all([ss.get("docs_llm_model"), input_folder_docs, output_folder_docs, ss.get("warehouse_id_docs")]):
             st.warning("Please fill in all required fields and select a warehouse.")
         else:
             with st.spinner("Generating documentation with AI… This may take a moment for large projects."):
                 try:
                     # Generate documentation
                     documentation = interactive_helper.generate_documentation(
-                        input_folder=docs_input_folder,
+                        input_folder=input_folder_docs,
                         model_name=ss.docs_llm_model,
                         cfg=cfg,
                         warehouse_id=ss.warehouse_id_docs,
@@ -779,9 +778,9 @@ with docs_tab:
                     )
                     
                     # Determine output file path
-                    output_folder = docs_output_folder if docs_output_folder.endswith('/') else f"{docs_output_folder}/"
+                    output_folder = output_folder_docs if output_folder_docs.endswith('/') else f"{output_folder_docs}/"
                     # Extract project name from input folder for filename
-                    project_name = os.path.basename(docs_input_folder.rstrip('/')) or "project"
+                    project_name = os.path.basename(input_folder_docs.rstrip('/')) or "project"
                     output_file_path = f"{output_folder}{project_name}_documentation.md"
                     
                     # Write the markdown file
